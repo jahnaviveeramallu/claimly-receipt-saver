@@ -152,7 +152,7 @@ const Admin = () => {
                     <TableRow>
                       {columns.map((c) => (
                         <TableHead key={c} className="whitespace-nowrap capitalize">
-                          {c.replaceAll("_", " ")}
+                          {c.replace(/_/g, " ")}
                         </TableHead>
                       ))}
                       <TableHead className="text-right">Actions</TableHead>
@@ -211,7 +211,7 @@ const Admin = () => {
           >
             {tableMeta.fields.map((f) => (
               <div key={f} className="space-y-1.5">
-                <Label htmlFor={f} className="capitalize">{f.replaceAll("_", " ")}</Label>
+                <Label htmlFor={f} className="capitalize">{f.replace(/_/g, " ")}</Label>
                 <Input
                   id={f}
                   name={f}
