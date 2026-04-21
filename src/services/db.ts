@@ -50,7 +50,7 @@ export const db = {
   },
 
   async remove<T extends TableName>(table: T, id: string): Promise<void> {
-    const { error } = await supabase.from(table).delete().eq("id", id);
+    const { error } = await (supabase.from(table) as any).delete().eq("id", id);
     if (error) throw error;
   },
 };
