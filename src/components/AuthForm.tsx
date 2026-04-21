@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,8 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AuthFormProps {
   mode: "login" | "signup";
@@ -14,12 +16,17 @@ interface AuthFormProps {
 
 export const AuthForm = ({ mode }: AuthFormProps) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
 
   const isSignup = mode === "signup";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (user) navigate("/dashboard", { replace: true });
+  }, [user, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSignup && form.password !== form.confirm) {
       toast.error("Passwords don't match");
@@ -30,10 +37,33 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      toast.success(isSignup ? "Welcome to Claimly!" : "Welcome back!");
-      navigate("/dashboard");
-    }, 700);
+    try {
+      if (isSignup) {
+        const { error } = await supabase.auth.signUp({
+          email: form.email,
+          password: form.password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/dashboard`,
+            data: { display_name: form.name },
+          },
+        });
+        if (error) throw error;
+        toast.success("Welcome to Claimly!");
+        navigate("/dashboard");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        });
+        if (error) throw error;
+        toast.success("Welcome back!");
+        navigate("/dashboard");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
