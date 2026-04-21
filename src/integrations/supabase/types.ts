@@ -14,16 +14,219 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      claims: {
+        Row: {
+          amount: number | null
+          created_at: string
+          id: string
+          message: string | null
+          product_id: string | null
+          reason: string
+          resolution: string | null
+          status: Database["public"]["Enums"]["claim_status"]
+          type: Database["public"]["Enums"]["claim_type"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          product_id?: string | null
+          reason: string
+          resolution?: string | null
+          status?: Database["public"]["Enums"]["claim_status"]
+          type?: Database["public"]["Enums"]["claim_type"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          product_id?: string | null
+          reason?: string
+          resolution?: string | null
+          status?: Database["public"]["Enums"]["claim_status"]
+          type?: Database["public"]["Enums"]["claim_type"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claims_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          category: string | null
+          created_at: string
+          currency: string
+          id: string
+          image_url: string | null
+          name: string
+          price: number
+          purchase_date: string
+          return_days: number
+          store: string
+          updated_at: string
+          user_id: string
+          warranty_months: number
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          image_url?: string | null
+          name: string
+          price?: number
+          purchase_date?: string
+          return_days?: number
+          store: string
+          updated_at?: string
+          user_id: string
+          warranty_months?: number
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          image_url?: string | null
+          name?: string
+          price?: number
+          purchase_date?: string
+          return_days?: number
+          store?: string
+          updated_at?: string
+          user_id?: string
+          warranty_months?: number
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      receipts: {
+        Row: {
+          created_at: string
+          currency: string
+          file_url: string | null
+          id: string
+          merchant: string
+          notes: string | null
+          product_id: string | null
+          purchase_date: string
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          file_url?: string | null
+          id?: string
+          merchant: string
+          notes?: string | null
+          product_id?: string | null
+          purchase_date?: string
+          total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          file_url?: string | null
+          id?: string
+          merchant?: string
+          notes?: string | null
+          product_id?: string | null
+          purchase_date?: string
+          total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
+      claim_status: "draft" | "sent" | "in_progress" | "resolved" | "rejected"
+      claim_type: "warranty" | "return" | "refund" | "price_match"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +353,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+      claim_status: ["draft", "sent", "in_progress", "resolved", "rejected"],
+      claim_type: ["warranty", "return", "refund", "price_match"],
+    },
   },
 } as const
