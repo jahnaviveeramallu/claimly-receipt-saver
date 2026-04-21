@@ -203,7 +203,11 @@ const Admin = () => {
               const values: Record<string, any> = {};
               for (const f of tableMeta.fields) {
                 const v = fd.get(f);
-                if (v !== null) values[f] = v;
+                if (v === null) continue;
+                const s = String(v).trim();
+                // On create, skip empty fields so DB defaults apply
+                if (s === "" && !editing) continue;
+                values[f] = s === "" ? null : s;
               }
               upsertMut.mutate(values);
             }}
