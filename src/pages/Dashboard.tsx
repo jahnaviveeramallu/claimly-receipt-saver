@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ReceiptUpload } from "@/components/ReceiptUpload";
@@ -6,17 +7,50 @@ import { ProductCard } from "@/components/ProductCard";
 import { ClaimDialog } from "@/components/ClaimDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockProducts, getStatus, Product } from "@/lib/mockData";
+import { getStatus, Product } from "@/lib/mockData";
+import { productFromRow } from "@/lib/adapters";
+import { db } from "@/services/db";
+import { useAuth } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
-import { LogOut, Search, Receipt, ShieldCheck, AlertTriangle, DollarSign } from "lucide-react";
+import { LogOut, Search, Receipt, ShieldCheck, AlertTriangle, DollarSign, Settings } from "lucide-react";
+import { toast } from "sonner";
 
 type Filter = "all" | "active" | "expiring" | "expired";
 
 const Dashboard = () => {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const { user, isAdmin, signOut } = useAuth();
+  const qc = useQueryClient();
   const [active, setActive] = useState<Product | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ["products"],
+    queryFn: () => db.list("products"),
+    enabled: !!user,
+  });
+
+  const products: Product[] = useMemo(() => rows.map(productFromRow), [rows]);
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      db.create("products", {
+        user_id: user!.id,
+        name: "New Scanned Product",
+        store: "Amazon",
+        price: Math.round(Math.random() * 400 + 30),
+        currency: "$",
+        purchase_date: new Date().toISOString().slice(0, 10),
+        warranty_months: 12,
+        return_days: 30,
+        category: "Electronics",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Receipt added");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const stats = useMemo(() => {
     const total = products.length;
@@ -32,21 +66,6 @@ const Dashboard = () => {
     return matchFilter && matchQuery;
   });
 
-  const handleUpload = () => {
-    const sample: Product = {
-      id: `p${Date.now()}`,
-      name: "New Scanned Product",
-      store: "Amazon",
-      price: Math.round(Math.random() * 400 + 30),
-      currency: "$",
-      purchaseDate: new Date().toISOString(),
-      warrantyMonths: 12,
-      returnDays: 30,
-      category: "Electronics",
-    };
-    setProducts([sample, ...products]);
-  };
-
   const filters: { id: Filter; label: string }[] = [
     { id: "all", label: `All (${products.length})` },
     { id: "active", label: "Active" },
@@ -56,24 +75,28 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-soft">
-      {/* top bar */}
       <header className="sticky top-0 z-40 glass border-b">
         <div className="container flex h-16 items-center justify-between">
           <Logo />
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Link to="/admin">
+                <Button variant="ghost" size="sm" className="gap-2">
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">Admin</span>
+                </Button>
+              </Link>
+            )}
             <ThemeToggle />
-            <Link to="/">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Sign out</span>
-              </Button>
-            </Link>
+            <Button variant="ghost" size="sm" className="gap-2" onClick={() => signOut()}>
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign out</span>
+            </Button>
           </div>
         </div>
       </header>
 
       <main className="container py-8 md:py-10 space-y-8">
-        {/* greeting */}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-display text-3xl md:text-4xl font-bold">Your dashboard</h1>
@@ -81,7 +104,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* stats */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { icon: Receipt, label: "Receipts tracked", value: stats.total, color: "text-primary", bg: "bg-primary/10" },
@@ -99,10 +121,8 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* upload */}
-        <ReceiptUpload onUpload={handleUpload} />
+        <ReceiptUpload onUpload={() => createMut.mutate()} />
 
-        {/* filters & search */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             {filters.map((f) => (
@@ -128,8 +148,9 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* product grid */}
-        {filtered.length ? (
+        {isLoading ? (
+          <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">Loading…</div>
+        ) : filtered.length ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map((p, i) => (
               <ProductCard key={p.id} product={p} onClaim={setActive} index={i} />
@@ -137,7 +158,7 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
-            No products match your filters yet.
+            No products yet. Tap "Upload receipt" to add one.
           </div>
         )}
       </main>
