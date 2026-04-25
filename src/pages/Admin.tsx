@@ -17,16 +17,62 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { db, type TableName } from "@/services/db";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Plus, Pencil, Trash2, Search, Shield } from "lucide-react";
 import { toast } from "sonner";
 
-const TABLES: { name: TableName; label: string; searchCol: string; fields: string[] }[] = [
-  { name: "products", label: "Products", searchCol: "name", fields: ["name", "store", "price", "currency", "purchase_date", "warranty_months", "return_days", "category", "image_url"] },
-  { name: "receipts", label: "Receipts", searchCol: "merchant", fields: ["merchant", "total", "currency", "purchase_date", "file_url", "notes"] },
-  { name: "claims", label: "Claims", searchCol: "reason", fields: ["type", "status", "reason", "message", "resolution", "amount"] },
-  { name: "profiles", label: "Profiles", searchCol: "display_name", fields: ["display_name", "avatar_url"] },
+type FieldKind = "text" | "number" | "date" | "textarea" | "select";
+interface FieldMeta {
+  name: string;
+  kind: FieldKind;
+  options?: string[];
+  step?: string;
+}
+
+const PRODUCT_FIELDS: FieldMeta[] = [
+  { name: "name", kind: "text" },
+  { name: "store", kind: "text" },
+  { name: "price", kind: "number", step: "0.01" },
+  { name: "currency", kind: "select", options: ["$", "€", "£", "¥", "₹", "A$", "C$"] },
+  { name: "purchase_date", kind: "date" },
+  { name: "warranty_months", kind: "number" },
+  { name: "return_days", kind: "number" },
+  { name: "category", kind: "text" },
+  { name: "image_url", kind: "text" },
+];
+const RECEIPT_FIELDS: FieldMeta[] = [
+  { name: "merchant", kind: "text" },
+  { name: "total", kind: "number", step: "0.01" },
+  { name: "currency", kind: "select", options: ["$", "€", "£", "¥", "₹", "A$", "C$"] },
+  { name: "purchase_date", kind: "date" },
+  { name: "file_url", kind: "text" },
+  { name: "notes", kind: "textarea" },
+];
+const CLAIM_FIELDS: FieldMeta[] = [
+  { name: "type", kind: "select", options: ["warranty", "return", "refund", "price_match"] },
+  { name: "status", kind: "select", options: ["draft", "sent", "in_progress", "resolved", "rejected"] },
+  { name: "reason", kind: "text" },
+  { name: "message", kind: "textarea" },
+  { name: "resolution", kind: "textarea" },
+  { name: "amount", kind: "number", step: "0.01" },
+];
+const PROFILE_FIELDS: FieldMeta[] = [
+  { name: "display_name", kind: "text" },
+  { name: "avatar_url", kind: "text" },
+];
+
+const NUMERIC_FIELDS = new Set(["price", "total", "amount", "warranty_months", "return_days"]);
+
+const TABLES: { name: TableName; label: string; searchCol: string; fields: FieldMeta[] }[] = [
+  { name: "products", label: "Products", searchCol: "name", fields: PRODUCT_FIELDS },
+  { name: "receipts", label: "Receipts", searchCol: "merchant", fields: RECEIPT_FIELDS },
+  { name: "claims", label: "Claims", searchCol: "reason", fields: CLAIM_FIELDS },
+  { name: "profiles", label: "Profiles", searchCol: "display_name", fields: PROFILE_FIELDS },
 ];
 
 const HIDDEN = new Set(["id", "created_at", "updated_at", "user_id"]);
