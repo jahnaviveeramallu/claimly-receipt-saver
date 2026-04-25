@@ -13,6 +13,18 @@ interface Props {
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
 
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 export const ReceiptUpload = ({ onUploaded }: Props) => {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -34,7 +46,7 @@ export const ReceiptUpload = ({ onUploaded }: Props) => {
     }
 
     setBusy(true);
-    const tId = toast.loading("Uploading receipt…");
+    const tId = toast.loading("Uploading & analyzing receipt…");
     try {
       const ext = file.name.split(".").pop() || "bin";
       const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
@@ -44,16 +56,42 @@ export const ReceiptUpload = ({ onUploaded }: Props) => {
         .upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) throw upErr;
 
-      await db.create("receipts", {
+      // Try AI extraction (best-effort, non-blocking on failure)
+      let parsed: {
+        merchant?: string | null; total?: number | null; currency?: string | null;
+        purchase_date?: string | null; warranty_detected?: boolean; warranty_months?: number | null;
+      } = {};
+      try {
+        const fileBase64 = await fileToBase64(file);
+        const { data, error } = await supabase.functions.invoke("parse-receipt", {
+          body: { fileBase64, mimeType: file.type },
+        });
+        if (error) throw error;
+        parsed = data ?? {};
+      } catch (aiErr: any) {
+        console.warn("AI parsing skipped", aiErr);
+        toast.message("Receipt saved — auto-extraction unavailable", { id: tId });
+      }
+
+      const fallbackMerchant = file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "Unknown";
+      const created = await db.create("receipts", {
         user_id: user.id,
-        merchant: file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "Unknown",
-        total: 0,
-        currency: "$",
-        purchase_date: new Date().toISOString().slice(0, 10),
+        merchant: (parsed.merchant?.trim() || fallbackMerchant).slice(0, 120),
+        total: typeof parsed.total === "number" ? parsed.total : 0,
+        currency: parsed.currency?.slice(0, 4) || "$",
+        purchase_date: parsed.purchase_date || new Date().toISOString().slice(0, 10),
         file_url: path,
+        notes: parsed.warranty_detected
+          ? `Warranty detected${parsed.warranty_months ? ` (${parsed.warranty_months} months)` : ""}`
+          : null,
       });
 
-      toast.success("Receipt uploaded", { id: tId });
+      const summary = parsed.merchant
+        ? `${created.merchant} — ${created.currency}${Number(created.total).toFixed(2)}${
+            parsed.warranty_detected ? " • Warranty ✓" : ""
+          }`
+        : "Receipt uploaded";
+      toast.success(summary, { id: tId });
       qc.invalidateQueries({ queryKey: ["receipts"] });
       onUploaded?.();
     } catch (e: any) {
@@ -85,9 +123,11 @@ export const ReceiptUpload = ({ onUploaded }: Props) => {
       <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-brand flex items-center justify-center mb-4 shadow-glow">
         {busy ? <FileText className="h-6 w-6 text-white animate-pulse" /> : <Upload className="h-6 w-6 text-white" />}
       </div>
-      <h3 className="font-display font-semibold text-lg">Upload a receipt</h3>
+      <h3 className="font-display font-semibold text-lg">
+        {busy ? "Analyzing receipt…" : "Upload a receipt"}
+      </h3>
       <p className="text-sm text-muted-foreground mt-1">
-        Drag & drop or click to browse — PNG, JPG, WEBP or PDF (max 10 MB)
+        We'll auto-detect merchant, total and warranty — PNG, JPG, WEBP or PDF (max 10 MB)
       </p>
     </div>
   );

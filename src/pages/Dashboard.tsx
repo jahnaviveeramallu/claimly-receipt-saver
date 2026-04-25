@@ -191,24 +191,39 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(receipts as Row<"receipts">[]).map((r) => (
-                  <div key={r.id} className="rounded-2xl bg-card border p-4 shadow-soft">
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <FileText className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{r.merchant}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {fmtDate(new Date(r.purchase_date))}
+                {(receipts as Row<"receipts">[]).map((r) => {
+                  const hasWarranty = !!r.notes?.toLowerCase().includes("warranty");
+                  return (
+                    <div key={r.id} className="rounded-2xl bg-card border p-4 shadow-soft">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                          <FileText className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate">{r.merchant}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {fmtDate(new Date(r.purchase_date))}
+                          </div>
+                        </div>
+                        <div className="font-display font-semibold">
+                          {r.currency}{Number(r.total).toFixed(2)}
                         </div>
                       </div>
-                      <div className="font-display font-semibold">
-                        {r.currency}{Number(r.total).toFixed(2)}
+                      <div className="flex items-center gap-2 mt-3">
+                        {hasWarranty ? (
+                          <Badge variant="default" className="gap-1">
+                            <ShieldCheck className="h-3 w-3" /> Warranty
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">No warranty</Badge>
+                        )}
+                        {r.notes && hasWarranty && (
+                          <span className="text-xs text-muted-foreground truncate">{r.notes}</span>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </TabsContent>
