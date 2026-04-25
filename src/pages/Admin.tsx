@@ -17,16 +17,62 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { db, type TableName } from "@/services/db";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Plus, Pencil, Trash2, Search, Shield } from "lucide-react";
 import { toast } from "sonner";
 
-const TABLES: { name: TableName; label: string; searchCol: string; fields: string[] }[] = [
-  { name: "products", label: "Products", searchCol: "name", fields: ["name", "store", "price", "currency", "purchase_date", "warranty_months", "return_days", "category", "image_url"] },
-  { name: "receipts", label: "Receipts", searchCol: "merchant", fields: ["merchant", "total", "currency", "purchase_date", "file_url", "notes"] },
-  { name: "claims", label: "Claims", searchCol: "reason", fields: ["type", "status", "reason", "message", "resolution", "amount"] },
-  { name: "profiles", label: "Profiles", searchCol: "display_name", fields: ["display_name", "avatar_url"] },
+type FieldKind = "text" | "number" | "date" | "textarea" | "select";
+interface FieldMeta {
+  name: string;
+  kind: FieldKind;
+  options?: string[];
+  step?: string;
+}
+
+const PRODUCT_FIELDS: FieldMeta[] = [
+  { name: "name", kind: "text" },
+  { name: "store", kind: "text" },
+  { name: "price", kind: "number", step: "0.01" },
+  { name: "currency", kind: "select", options: ["$", "€", "£", "¥", "₹", "A$", "C$"] },
+  { name: "purchase_date", kind: "date" },
+  { name: "warranty_months", kind: "number" },
+  { name: "return_days", kind: "number" },
+  { name: "category", kind: "text" },
+  { name: "image_url", kind: "text" },
+];
+const RECEIPT_FIELDS: FieldMeta[] = [
+  { name: "merchant", kind: "text" },
+  { name: "total", kind: "number", step: "0.01" },
+  { name: "currency", kind: "select", options: ["$", "€", "£", "¥", "₹", "A$", "C$"] },
+  { name: "purchase_date", kind: "date" },
+  { name: "file_url", kind: "text" },
+  { name: "notes", kind: "textarea" },
+];
+const CLAIM_FIELDS: FieldMeta[] = [
+  { name: "type", kind: "select", options: ["warranty", "return", "refund", "price_match"] },
+  { name: "status", kind: "select", options: ["draft", "sent", "in_progress", "resolved", "rejected"] },
+  { name: "reason", kind: "text" },
+  { name: "message", kind: "textarea" },
+  { name: "resolution", kind: "textarea" },
+  { name: "amount", kind: "number", step: "0.01" },
+];
+const PROFILE_FIELDS: FieldMeta[] = [
+  { name: "display_name", kind: "text" },
+  { name: "avatar_url", kind: "text" },
+];
+
+const NUMERIC_FIELDS = new Set(["price", "total", "amount", "warranty_months", "return_days"]);
+
+const TABLES: { name: TableName; label: string; searchCol: string; fields: FieldMeta[] }[] = [
+  { name: "products", label: "Products", searchCol: "name", fields: PRODUCT_FIELDS },
+  { name: "receipts", label: "Receipts", searchCol: "merchant", fields: RECEIPT_FIELDS },
+  { name: "claims", label: "Claims", searchCol: "reason", fields: CLAIM_FIELDS },
+  { name: "profiles", label: "Profiles", searchCol: "display_name", fields: PROFILE_FIELDS },
 ];
 
 const HIDDEN = new Set(["id", "created_at", "updated_at", "user_id"]);
@@ -49,7 +95,7 @@ const Admin = () => {
   });
 
   const columns = useMemo(() => {
-    if (!rows.length) return tableMeta.fields;
+    if (!rows.length) return tableMeta.fields.map((f) => f.name);
     return Object.keys(rows[0] as any).filter((k) => !HIDDEN.has(k));
   }, [rows, tableMeta.fields]);
 
@@ -202,28 +248,58 @@ const Admin = () => {
               const fd = new FormData(e.currentTarget);
               const values: Record<string, any> = {};
               for (const f of tableMeta.fields) {
-                const v = fd.get(f);
+                const v = fd.get(f.name);
                 if (v === null) continue;
                 const s = String(v).trim();
                 // On create, skip empty fields so DB defaults apply
                 if (s === "" && !editing) continue;
-                values[f] = s === "" ? null : s;
+                if (s === "") { values[f.name] = null; continue; }
+                values[f.name] = NUMERIC_FIELDS.has(f.name) ? Number(s) : s;
               }
               upsertMut.mutate(values);
             }}
             className="space-y-3 pt-2"
           >
-            {tableMeta.fields.map((f) => (
-              <div key={f} className="space-y-1.5">
-                <Label htmlFor={f} className="capitalize">{f.replace(/_/g, " ")}</Label>
-                <Input
-                  id={f}
-                  name={f}
-                  defaultValue={dialogValues[f] ?? ""}
-                  className="rounded-xl"
-                />
-              </div>
-            ))}
+            {tableMeta.fields.map((f) => {
+              const current = dialogValues[f.name] ?? "";
+              const labelText = f.name.replace(/_/g, " ");
+              return (
+                <div key={f.name} className="space-y-1.5">
+                  <Label htmlFor={f.name} className="capitalize">{labelText}</Label>
+                  {f.kind === "textarea" ? (
+                    <Textarea
+                      id={f.name}
+                      name={f.name}
+                      defaultValue={current}
+                      rows={3}
+                      className="rounded-xl"
+                    />
+                  ) : f.kind === "select" ? (
+                    <Select name={f.name} defaultValue={current ? String(current) : undefined}>
+                      <SelectTrigger className="rounded-xl"><SelectValue placeholder={`Select ${labelText}`} /></SelectTrigger>
+                      <SelectContent>
+                        {f.options!.map((o) => (
+                          <SelectItem key={o} value={o} className="capitalize">{o.replace(/_/g, " ")}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id={f.name}
+                      name={f.name}
+                      type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
+                      step={f.step}
+                      defaultValue={
+                        f.kind === "date" && current
+                          ? String(current).slice(0, 10)
+                          : current ?? ""
+                      }
+                      className="rounded-xl"
+                    />
+                  )}
+                </div>
+              );
+            })}
             <DialogFooter className="pt-3">
               <Button type="button" variant="outline" onClick={() => { setCreating(false); setEditing(null); }}>
                 Cancel

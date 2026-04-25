@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Product, fmtDate, getDates } from "@/lib/mockData";
-import { Copy, Check, Sparkles } from "lucide-react";
+import { Copy, Check, Sparkles, Save } from "lucide-react";
 import { toast } from "sonner";
+import { db } from "@/services/db";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Props {
   product: Product | null;
@@ -58,10 +61,34 @@ Best regards,
 };
 
 export const ClaimDialog = ({ product, onClose }: Props) => {
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<"refund" | "warranty">("refund");
 
   useEffect(() => { setCopied(false); setTab("refund"); }, [product]);
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      if (!product || !user) throw new Error("Missing context");
+      return db.create("claims", {
+        user_id: user.id,
+        product_id: product.id,
+        type: tab === "refund" ? "refund" : "warranty",
+        status: "draft",
+        reason: tab === "refund"
+          ? `Refund request for ${product.name}`
+          : `Warranty claim for ${product.name}`,
+        message: text,
+        amount: tab === "refund" ? product.price : null,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["claims"] });
+      toast.success("Claim saved to your dashboard");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   if (!product) return null;
   const text = tab === "refund" ? buildRefund(product) : buildWarranty(product);
@@ -96,8 +123,12 @@ export const ClaimDialog = ({ product, onClose }: Props) => {
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="gap-1.5">
+            <Save className="h-4 w-4" />
+            {saveMut.isPending ? "Saving…" : "Save to claims"}
+          </Button>
           <Button variant="hero" onClick={copy}>
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             {copied ? "Copied!" : "Copy claim"}

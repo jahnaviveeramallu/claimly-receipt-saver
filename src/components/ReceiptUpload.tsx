@@ -1,25 +1,68 @@
 import { useRef, useState } from "react";
 import { Upload, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/services/db";
+import { useAuth } from "@/hooks/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Props {
-  onUpload: () => void;
+  onUploaded?: () => void;
 }
 
-export const ReceiptUpload = ({ onUpload }: Props) => {
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const ALLOWED = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+
+export const ReceiptUpload = ({ onUploaded }: Props) => {
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files || !files.length) return;
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || !files.length || !user) return;
+    const file = files[0];
+
+    if (!ALLOWED.includes(file.type)) {
+      toast.error("Only PNG, JPG, WEBP or PDF allowed");
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      toast.error("File too large (max 10 MB)");
+      return;
+    }
+
     setBusy(true);
-    toast.loading("Scanning receipt…", { id: "scan" });
-    setTimeout(() => {
-      toast.success("Receipt scanned and added!", { id: "scan" });
+    const tId = toast.loading("Uploading receipt…");
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from("receipts")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+
+      await db.create("receipts", {
+        user_id: user.id,
+        merchant: file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "Unknown",
+        total: 0,
+        currency: "$",
+        purchase_date: new Date().toISOString().slice(0, 10),
+        file_url: path,
+      });
+
+      toast.success("Receipt uploaded", { id: tId });
+      qc.invalidateQueries({ queryKey: ["receipts"] });
+      onUploaded?.();
+    } catch (e: any) {
+      console.error("Receipt upload failed", e);
+      toast.error(e.message ?? "Upload failed", { id: tId });
+    } finally {
       setBusy(false);
-      onUpload();
-    }, 1400);
+      if (inputRef.current) inputRef.current.value = "";
+    }
   };
 
   return (
@@ -35,8 +78,7 @@ export const ReceiptUpload = ({ onUpload }: Props) => {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*,.pdf"
-        multiple
+        accept="image/png,image/jpeg,image/webp,application/pdf"
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
@@ -45,7 +87,7 @@ export const ReceiptUpload = ({ onUpload }: Props) => {
       </div>
       <h3 className="font-display font-semibold text-lg">Upload a receipt</h3>
       <p className="text-sm text-muted-foreground mt-1">
-        Drag & drop or click to browse — PNG, JPG or PDF
+        Drag & drop or click to browse — PNG, JPG, WEBP or PDF (max 10 MB)
       </p>
     </div>
   );
