@@ -1,28 +1,40 @@
 import { useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ReceiptUpload } from "@/components/ReceiptUpload";
 import { ProductCard } from "@/components/ProductCard";
 import { ClaimDialog } from "@/components/ClaimDialog";
+import { AddProductDialog } from "@/components/AddProductDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getStatus, Product } from "@/lib/mockData";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { getStatus, Product, fmtDate } from "@/lib/mockData";
 import { productFromRow } from "@/lib/adapters";
-import { db } from "@/services/db";
+import { db, type Row } from "@/services/db";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
-import { LogOut, Search, Receipt, ShieldCheck, AlertTriangle, DollarSign, Settings } from "lucide-react";
-import { toast } from "sonner";
+import { LogOut, Search, Receipt, ShieldCheck, AlertTriangle, DollarSign, Settings, Plus, FileText } from "lucide-react";
 
 type Filter = "all" | "active" | "expiring" | "expired";
 
+const claimStatusVariant = (s: string): "default" | "secondary" | "destructive" | "outline" => {
+  switch (s) {
+    case "resolved": return "default";
+    case "rejected": return "destructive";
+    case "in_progress":
+    case "sent": return "secondary";
+    default: return "outline";
+  }
+};
+
 const Dashboard = () => {
   const { user, isAdmin, signOut } = useAuth();
-  const qc = useQueryClient();
   const [active, setActive] = useState<Product | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["products"],
@@ -30,27 +42,24 @@ const Dashboard = () => {
     enabled: !!user,
   });
 
-  const products: Product[] = useMemo(() => rows.map(productFromRow), [rows]);
-
-  const createMut = useMutation({
-    mutationFn: () =>
-      db.create("products", {
-        user_id: user!.id,
-        name: "New Scanned Product",
-        store: "Amazon",
-        price: Math.round(Math.random() * 400 + 30),
-        currency: "$",
-        purchase_date: new Date().toISOString().slice(0, 10),
-        warranty_months: 12,
-        return_days: 30,
-        category: "Electronics",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["products"] });
-      toast.success("Receipt added");
-    },
-    onError: (e: any) => toast.error(e.message),
+  const { data: receipts = [] } = useQuery({
+    queryKey: ["receipts"],
+    queryFn: () => db.list("receipts"),
+    enabled: !!user,
   });
+
+  const { data: claims = [] } = useQuery({
+    queryKey: ["claims"],
+    queryFn: () => db.list("claims"),
+    enabled: !!user,
+  });
+
+  const products: Product[] = useMemo(() => rows.map(productFromRow), [rows]);
+  const productById = useMemo(() => {
+    const m = new Map<string, Product>();
+    products.forEach((p) => m.set(p.id, p));
+    return m;
+  }, [products]);
 
   const stats = useMemo(() => {
     const total = products.length;
@@ -102,6 +111,9 @@ const Dashboard = () => {
             <h1 className="font-display text-3xl md:text-4xl font-bold">Your dashboard</h1>
             <p className="text-muted-foreground mt-1">Track receipts, warranties and claims — all in one place.</p>
           </div>
+          <Button variant="hero" className="gap-2" onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4" /> Add product
+          </Button>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -121,49 +133,123 @@ const Dashboard = () => {
           ))}
         </div>
 
-        <ReceiptUpload onUpload={() => createMut.mutate()} />
+        <Tabs defaultValue="products" className="space-y-6">
+          <TabsList className="rounded-full">
+            <TabsTrigger value="products" className="rounded-full">Products</TabsTrigger>
+            <TabsTrigger value="receipts" className="rounded-full">Receipts ({receipts.length})</TabsTrigger>
+            <TabsTrigger value="claims" className="rounded-full">Claims ({claims.length})</TabsTrigger>
+          </TabsList>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            {filters.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setFilter(f.id)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  filter === f.id ? "bg-foreground text-background" : "bg-card border hover:bg-accent"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search products…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-9 h-10 rounded-full"
-            />
-          </div>
-        </div>
+          <TabsContent value="products" className="space-y-6">
+            <ReceiptUpload />
 
-        {isLoading ? (
-          <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">Loading…</div>
-        ) : filtered.length ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filtered.map((p, i) => (
-              <ProductCard key={p.id} product={p} onClaim={setActive} index={i} />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
-            No products yet. Tap "Upload receipt" to add one.
-          </div>
-        )}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {filters.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFilter(f.id)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                      filter === f.id ? "bg-foreground text-background" : "bg-card border hover:bg-accent"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search products…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="pl-9 h-10 rounded-full"
+                />
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">Loading…</div>
+            ) : filtered.length ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filtered.map((p, i) => (
+                  <ProductCard key={p.id} product={p} onClaim={setActive} index={i} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
+                No products yet. Tap "Add product" to start tracking.
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="receipts" className="space-y-4">
+            <ReceiptUpload />
+            {receipts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
+                No receipts uploaded yet.
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {(receipts as Row<"receipts">[]).map((r) => (
+                  <div key={r.id} className="rounded-2xl bg-card border p-4 shadow-soft">
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <FileText className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{r.merchant}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {fmtDate(new Date(r.purchase_date))}
+                        </div>
+                      </div>
+                      <div className="font-display font-semibold">
+                        {r.currency}{Number(r.total).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="claims" className="space-y-4">
+            {claims.length === 0 ? (
+              <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
+                No claims yet. Open any product and tap "Generate claim".
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(claims as Row<"claims">[]).map((c) => {
+                  const p = c.product_id ? productById.get(c.product_id) : null;
+                  return (
+                    <div key={c.id} className="rounded-2xl bg-card border p-4 shadow-soft">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">{p?.name ?? "Unknown product"}</span>
+                            <Badge variant="outline" className="capitalize">{c.type}</Badge>
+                            <Badge variant={claimStatusVariant(c.status)} className="capitalize">
+                              {c.status.replace(/_/g, " ")}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{c.reason}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {fmtDate(new Date(c.created_at))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
 
       <ClaimDialog product={active} onClose={() => setActive(null)} />
+      <AddProductDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
   );
 };
