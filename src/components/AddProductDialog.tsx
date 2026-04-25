@@ -41,7 +41,17 @@ export const AddProductDialog = ({ open, onOpenChange }: Props) => {
 
   const mut = useMutation({
     mutationFn: (values: z.infer<typeof schema>) =>
-      db.create("products", { ...values, user_id: user!.id }),
+      db.create("products", {
+        name: values.name,
+        store: values.store,
+        price: values.price,
+        currency: values.currency,
+        purchase_date: values.purchase_date,
+        warranty_months: values.warranty_months,
+        return_days: values.return_days,
+        category: values.category ?? null,
+        user_id: user!.id,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["products"] });
       toast.success("Product added");
