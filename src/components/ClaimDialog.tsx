@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Product, fmtDate, getDates } from "@/lib/mockData";
-import { Copy, Check, Sparkles } from "lucide-react";
+import { Copy, Check, Sparkles, Save } from "lucide-react";
 import { toast } from "sonner";
+import { db } from "@/services/db";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Props {
   product: Product | null;
