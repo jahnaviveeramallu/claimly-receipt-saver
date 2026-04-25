@@ -95,7 +95,7 @@ const Admin = () => {
   });
 
   const columns = useMemo(() => {
-    if (!rows.length) return tableMeta.fields;
+    if (!rows.length) return tableMeta.fields.map((f) => f.name);
     return Object.keys(rows[0] as any).filter((k) => !HIDDEN.has(k));
   }, [rows, tableMeta.fields]);
 
