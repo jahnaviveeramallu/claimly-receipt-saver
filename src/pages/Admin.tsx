@@ -248,28 +248,58 @@ const Admin = () => {
               const fd = new FormData(e.currentTarget);
               const values: Record<string, any> = {};
               for (const f of tableMeta.fields) {
-                const v = fd.get(f);
+                const v = fd.get(f.name);
                 if (v === null) continue;
                 const s = String(v).trim();
                 // On create, skip empty fields so DB defaults apply
                 if (s === "" && !editing) continue;
-                values[f] = s === "" ? null : s;
+                if (s === "") { values[f.name] = null; continue; }
+                values[f.name] = NUMERIC_FIELDS.has(f.name) ? Number(s) : s;
               }
               upsertMut.mutate(values);
             }}
             className="space-y-3 pt-2"
           >
-            {tableMeta.fields.map((f) => (
-              <div key={f} className="space-y-1.5">
-                <Label htmlFor={f} className="capitalize">{f.replace(/_/g, " ")}</Label>
-                <Input
-                  id={f}
-                  name={f}
-                  defaultValue={dialogValues[f] ?? ""}
-                  className="rounded-xl"
-                />
-              </div>
-            ))}
+            {tableMeta.fields.map((f) => {
+              const current = dialogValues[f.name] ?? "";
+              const labelText = f.name.replace(/_/g, " ");
+              return (
+                <div key={f.name} className="space-y-1.5">
+                  <Label htmlFor={f.name} className="capitalize">{labelText}</Label>
+                  {f.kind === "textarea" ? (
+                    <Textarea
+                      id={f.name}
+                      name={f.name}
+                      defaultValue={current}
+                      rows={3}
+                      className="rounded-xl"
+                    />
+                  ) : f.kind === "select" ? (
+                    <Select name={f.name} defaultValue={current ? String(current) : undefined}>
+                      <SelectTrigger className="rounded-xl"><SelectValue placeholder={`Select ${labelText}`} /></SelectTrigger>
+                      <SelectContent>
+                        {f.options!.map((o) => (
+                          <SelectItem key={o} value={o} className="capitalize">{o.replace(/_/g, " ")}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id={f.name}
+                      name={f.name}
+                      type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
+                      step={f.step}
+                      defaultValue={
+                        f.kind === "date" && current
+                          ? String(current).slice(0, 10)
+                          : current ?? ""
+                      }
+                      className="rounded-xl"
+                    />
+                  )}
+                </div>
+              );
+            })}
             <DialogFooter className="pt-3">
               <Button type="button" variant="outline" onClick={() => { setCreating(false); setEditing(null); }}>
                 Cancel
