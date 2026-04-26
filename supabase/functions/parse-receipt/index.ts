@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
     const isImage = mimeType.startsWith("image/");
     if (!isImage) {
       return new Response(JSON.stringify({
+        is_receipt: true, confidence: 0.5,
         merchant: null, total: null, currency: "$", purchase_date: null,
         warranty_months: null, warranty_detected: false, items: [],
         note: "PDF parsing not supported — please enter details manually.",
