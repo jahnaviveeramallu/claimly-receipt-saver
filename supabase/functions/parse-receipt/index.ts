@@ -41,12 +41,12 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: "You extract structured data from receipt images. Always return valid JSON via the provided tool.",
+            content: "You validate and extract data from receipt/bill images. FIRST decide if the image is actually a receipt, bill, invoice or proof of purchase. If it is NOT (e.g. selfies, random photos, memes, unrelated documents), set is_receipt=false and leave other fields empty. Only extract merchant/total/etc when is_receipt=true. Always call the submit_receipt tool.",
           },
           {
             role: "user",
             content: [
-              { type: "text", text: "Extract receipt details from this image." },
+              { type: "text", text: "Validate and extract this image. Is it a real receipt/bill?" },
               { type: "image_url", image_url: { url: dataUrl } },
             ],
           },
