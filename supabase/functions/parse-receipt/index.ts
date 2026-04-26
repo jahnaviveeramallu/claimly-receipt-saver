@@ -55,15 +55,17 @@ Deno.serve(async (req) => {
           type: "function",
           function: {
             name: "submit_receipt",
-            description: "Submit extracted receipt fields",
+            description: "Submit extracted receipt fields after validating the image is a receipt or bill",
             parameters: {
               type: "object",
               properties: {
+                is_receipt: { type: "boolean", description: "True ONLY if the image is clearly a receipt, bill, invoice, or proof of purchase (showing merchant, items/total, payment). False for unrelated photos, screenshots, selfies, memes, random documents, etc." },
+                confidence: { type: "number", description: "Confidence 0-1 that this is a valid receipt/bill" },
                 merchant: { type: "string", description: "Store / merchant name" },
                 total: { type: "number", description: "Final total amount paid" },
                 currency: { type: "string", description: "Currency symbol or code, e.g. $, €, USD" },
                 purchase_date: { type: "string", description: "ISO date YYYY-MM-DD" },
-                warranty_detected: { type: "boolean", description: "True if receipt mentions warranty" },
+                warranty_detected: { type: "boolean", description: "True if receipt explicitly mentions warranty/guarantee terms" },
                 warranty_months: { type: "number", description: "Warranty duration in months if mentioned" },
                 items: {
                   type: "array",
@@ -77,7 +79,7 @@ Deno.serve(async (req) => {
                   },
                 },
               },
-              required: ["merchant", "total", "currency", "warranty_detected"],
+              required: ["is_receipt", "confidence"],
             },
           },
         }],
