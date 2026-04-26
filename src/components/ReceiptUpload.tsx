@@ -56,11 +56,13 @@ export const ReceiptUpload = ({ onUploaded }: Props) => {
         .upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) throw upErr;
 
-      // Try AI extraction (best-effort, non-blocking on failure)
+      // Try AI extraction + validation
       let parsed: {
+        is_receipt?: boolean; confidence?: number | null;
         merchant?: string | null; total?: number | null; currency?: string | null;
         purchase_date?: string | null; warranty_detected?: boolean; warranty_months?: number | null;
       } = {};
+      let aiAvailable = true;
       try {
         const fileBase64 = await fileToBase64(file);
         const { data, error } = await supabase.functions.invoke("parse-receipt", {
@@ -70,10 +72,24 @@ export const ReceiptUpload = ({ onUploaded }: Props) => {
         parsed = data ?? {};
       } catch (aiErr: any) {
         console.warn("AI parsing skipped", aiErr);
-        toast.message("Receipt saved — auto-extraction unavailable", { id: tId });
+        aiAvailable = false;
+      }
+
+      // Reject invalid receipts (only when AI actually validated the image)
+      if (aiAvailable && parsed.is_receipt === false) {
+        // Clean up the uploaded file
+        await supabase.storage.from("receipts").remove([path]).catch(() => {});
+        toast.error("Invalid receipt! Please upload a valid bill or receipt.", { id: tId });
+        return;
       }
 
       const fallbackMerchant = file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "Unknown";
+      const hasWarranty = !!parsed.warranty_detected;
+      const section = hasWarranty ? "warranty" : "expense";
+      const warrantyNote = hasWarranty
+        ? `Warranty detected${parsed.warranty_months ? ` (${parsed.warranty_months} months)` : ""}`
+        : "Expense only — no warranty info";
+
       const created = await db.create("receipts", {
         user_id: user.id,
         merchant: (parsed.merchant?.trim() || fallbackMerchant).slice(0, 120),
@@ -81,16 +97,12 @@ export const ReceiptUpload = ({ onUploaded }: Props) => {
         currency: parsed.currency?.slice(0, 4) || "$",
         purchase_date: parsed.purchase_date || new Date().toISOString().slice(0, 10),
         file_url: path,
-        notes: parsed.warranty_detected
-          ? `Warranty detected${parsed.warranty_months ? ` (${parsed.warranty_months} months)` : ""}`
-          : null,
+        notes: `[${section}] ${warrantyNote}`,
       });
 
-      const summary = parsed.merchant
-        ? `${created.merchant} — ${created.currency}${Number(created.total).toFixed(2)}${
-            parsed.warranty_detected ? " • Warranty ✓" : ""
-          }`
-        : "Receipt uploaded";
+      const summary = `${created.merchant} — ${created.currency}${Number(created.total).toFixed(2)} • ${
+        hasWarranty ? "Warranty Tracking ✓" : "Expense Tracking"
+      }`;
       toast.success(summary, { id: tId });
       qc.invalidateQueries({ queryKey: ["receipts"] });
       onUploaded?.();
