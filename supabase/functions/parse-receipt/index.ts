@@ -109,6 +109,8 @@ Deno.serve(async (req) => {
     try { parsed = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; } catch { parsed = {}; }
 
     return new Response(JSON.stringify({
+      is_receipt: parsed.is_receipt !== false,
+      confidence: typeof parsed.confidence === "number" ? parsed.confidence : null,
       merchant: parsed.merchant ?? null,
       total: typeof parsed.total === "number" ? parsed.total : null,
       currency: parsed.currency ?? "$",
