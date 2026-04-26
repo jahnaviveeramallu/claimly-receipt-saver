@@ -183,49 +183,99 @@ const Dashboard = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="receipts" className="space-y-4">
+          <TabsContent value="receipts" className="space-y-6">
             <ReceiptUpload />
-            {receipts.length === 0 ? (
-              <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
-                No receipts uploaded yet.
-              </div>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(receipts as Row<"receipts">[]).map((r) => {
-                  const hasWarranty = !!r.notes?.toLowerCase().includes("warranty");
-                  return (
-                    <div key={r.id} className="rounded-2xl bg-card border p-4 shadow-soft">
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                          <FileText className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium truncate">{r.merchant}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {fmtDate(new Date(r.purchase_date))}
-                          </div>
-                        </div>
-                        <div className="font-display font-semibold">
-                          {r.currency}{Number(r.total).toFixed(2)}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 mt-3">
-                        {hasWarranty ? (
-                          <Badge variant="default" className="gap-1">
-                            <ShieldCheck className="h-3 w-3" /> Warranty
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">No warranty</Badge>
-                        )}
-                        {r.notes && hasWarranty && (
-                          <span className="text-xs text-muted-foreground truncate">{r.notes}</span>
-                        )}
+            {(() => {
+              const all = receipts as Row<"receipts">[];
+              const isWarranty = (r: Row<"receipts">) =>
+                r.notes?.toLowerCase().includes("[warranty]") ||
+                (r.notes?.toLowerCase().includes("warranty") && !r.notes?.toLowerCase().includes("[expense]"));
+              const warrantyReceipts = all.filter(isWarranty);
+              const expenseReceipts = all.filter((r) => !isWarranty(r));
+
+              const renderCard = (r: Row<"receipts">, hasWarranty: boolean) => (
+                <div key={r.id} className="rounded-2xl bg-card border p-4 shadow-soft">
+                  <div className="flex items-start gap-3">
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${hasWarranty ? "bg-success/10" : "bg-lavender/10"}`}>
+                      <FileText className={`h-5 w-5 ${hasWarranty ? "text-success" : "text-lavender"}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{r.merchant}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {fmtDate(new Date(r.purchase_date))}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <div className="font-display font-semibold">
+                      {r.currency}{Number(r.total).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    {hasWarranty ? (
+                      <Badge variant="default" className="gap-1">
+                        <ShieldCheck className="h-3 w-3" /> Warranty
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1">
+                        <DollarSign className="h-3 w-3" /> Expense
+                      </Badge>
+                    )}
+                    {r.notes && (
+                      <span className="text-xs text-muted-foreground truncate">
+                        {r.notes.replace(/^\[(warranty|expense)\]\s*/i, "")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+
+              if (all.length === 0) {
+                return (
+                  <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
+                    No receipts uploaded yet.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-8">
+                  <section className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-success" />
+                      <h2 className="font-display text-xl font-semibold">Warranty Tracking</h2>
+                      <Badge variant="secondary">{warrantyReceipts.length}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Receipts with detected warranty info.</p>
+                    {warrantyReceipts.length ? (
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {warrantyReceipts.map((r) => renderCard(r, true))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                        No warranty receipts yet.
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-lavender" />
+                      <h2 className="font-display text-xl font-semibold">Expense Tracking</h2>
+                      <Badge variant="secondary">{expenseReceipts.length}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Payment receipts without warranty info — track your spending.</p>
+                    {expenseReceipts.length ? (
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {expenseReceipts.map((r) => renderCard(r, false))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                        No expense-only receipts yet.
+                      </div>
+                    )}
+                  </section>
+                </div>
+              );
+            })()}
           </TabsContent>
 
           <TabsContent value="claims" className="space-y-4">
