@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
     const isImage = mimeType.startsWith("image/");
     if (!isImage) {
       return new Response(JSON.stringify({
+        is_receipt: true, confidence: 0.5,
         merchant: null, total: null, currency: "$", purchase_date: null,
         warranty_months: null, warranty_detected: false, items: [],
         note: "PDF parsing not supported — please enter details manually.",
@@ -41,12 +42,12 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: "You extract structured data from receipt images. Always return valid JSON via the provided tool.",
+            content: "You validate and extract data from receipt/bill images. FIRST decide if the image is actually a receipt, bill, invoice or proof of purchase. If it is NOT (e.g. selfies, random photos, memes, unrelated documents), set is_receipt=false and leave other fields empty. Only extract merchant/total/etc when is_receipt=true. Always call the submit_receipt tool.",
           },
           {
             role: "user",
             content: [
-              { type: "text", text: "Extract receipt details from this image." },
+              { type: "text", text: "Validate and extract this image. Is it a real receipt/bill?" },
               { type: "image_url", image_url: { url: dataUrl } },
             ],
           },
@@ -55,15 +56,17 @@ Deno.serve(async (req) => {
           type: "function",
           function: {
             name: "submit_receipt",
-            description: "Submit extracted receipt fields",
+            description: "Submit extracted receipt fields after validating the image is a receipt or bill",
             parameters: {
               type: "object",
               properties: {
+                is_receipt: { type: "boolean", description: "True ONLY if the image is clearly a receipt, bill, invoice, or proof of purchase (showing merchant, items/total, payment). False for unrelated photos, screenshots, selfies, memes, random documents, etc." },
+                confidence: { type: "number", description: "Confidence 0-1 that this is a valid receipt/bill" },
                 merchant: { type: "string", description: "Store / merchant name" },
                 total: { type: "number", description: "Final total amount paid" },
                 currency: { type: "string", description: "Currency symbol or code, e.g. $, €, USD" },
                 purchase_date: { type: "string", description: "ISO date YYYY-MM-DD" },
-                warranty_detected: { type: "boolean", description: "True if receipt mentions warranty" },
+                warranty_detected: { type: "boolean", description: "True if receipt explicitly mentions warranty/guarantee terms" },
                 warranty_months: { type: "number", description: "Warranty duration in months if mentioned" },
                 items: {
                   type: "array",
@@ -77,7 +80,7 @@ Deno.serve(async (req) => {
                   },
                 },
               },
-              required: ["merchant", "total", "currency", "warranty_detected"],
+              required: ["is_receipt", "confidence"],
             },
           },
         }],
@@ -107,6 +110,8 @@ Deno.serve(async (req) => {
     try { parsed = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; } catch { parsed = {}; }
 
     return new Response(JSON.stringify({
+      is_receipt: parsed.is_receipt !== false,
+      confidence: typeof parsed.confidence === "number" ? parsed.confidence : null,
       merchant: parsed.merchant ?? null,
       total: typeof parsed.total === "number" ? parsed.total : null,
       currency: parsed.currency ?? "$",
